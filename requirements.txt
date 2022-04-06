@@ -1,0 +1,5 @@
+pathvalidate==2.5.0
+requests==2.24.0
+filedate==1.8
+beautifulsoup4==4.10.0
+weasyprint==54.3
