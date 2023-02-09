@@ -14,6 +14,24 @@ import chromedriver_autoinstaller
 chromedriver_autoinstaller.install()
 cwd=str(pathlib.Path(__file__).parent.resolve())
 
+#region parse argument
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "-p", "--page", help="Define from which page to download.", type=int, default=1)
+parser.add_argument(
+    "-d", "--dir", help="Define where to save the PDF.", default=cwd)
+parser.add_argument(
+    "-a", "--allPages", help="Save all of each member's blog.", action='store_true')
+parser.add_argument(
+"-s", "--selectmember", help="Select whose member's blog to be downloaded.", action='store_true')
+parser.add_argument(
+    "--cwd", help="Define program's working directory", default=cwd)
+args = parser.parse_args()
+#endregion
+
+if args.cwd:
+    cwd = args.cwd
+
 member_list = '''
  {"members": [
         {
@@ -181,19 +199,6 @@ css_font_string = '''
 '''
 
 listcss = [CSS(string=css_font_string,font_config=font_config),CSS(filename=os.path.join(cwd,"common","common_edit.css")), CSS(filename=os.path.join(cwd,"common","sph_custom.css")), CSS(filename=os.path.join(cwd,"common","sph.css")),CSS(filename=os.path.join(cwd,"common","style_edit.css")), CSS(url="https://fonts.googleapis.com/css?family=Noto+Sans+JP|Overpass",font_config=font_config)]
-
-#region parse argument
-parser = argparse.ArgumentParser()
-parser.add_argument(
-    "-p", "--page", help="Define from which page to download.", type=int, default=1)
-parser.add_argument(
-    "-d", "--dir", help="Define where to save the PDF.", default=cwd)
-parser.add_argument(
-    "-a", "--allPages", help="Save all of each member's blog.", action='store_true')
-parser.add_argument(
-"-s", "--selectmember", help="Select whose member's blog to be downloaded.", action='store_true')
-args = parser.parse_args()
-#endregion
 
 options = webdriver.ChromeOptions()
 options.add_argument('--ignore-certificate-errors')
