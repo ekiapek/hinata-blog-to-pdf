@@ -1,14 +1,19 @@
 import argparse
 import json
 import pathlib
-import requests
 from bs4 import BeautifulSoup
 import os
 import filedate
 from weasyprint import HTML, CSS
-import css
+from weasyprint.text.fonts import FontConfiguration
 import datetime
 from pathvalidate import validate_filename, ValidationError
+from selenium import webdriver
+import chromedriver_autoinstaller
+
+chromedriver_autoinstaller.install()
+cwd=str(pathlib.Path(__file__).parent.resolve())
+
 member_list = '''
  {"members": [
         {
@@ -102,20 +107,30 @@ member_list = '''
         {
             "memberName": "POKA",
             "blogUrl": "https://www.hinatazaka46.com/s/official/diary/member/list?ima=0000&ct=000"
+        },
+        {
+            "memberName": "4-kisei Relay",
+            "blogUrl": "https://www.hinatazaka46.com/s/official/diary/member/list?ima=0000&ct=2000"
         }
     ]}
 '''
 
-css1 = css.sph20201212
-css2 = css.sph_custom20211001
-css3 = css.style_edit220114
+# css1 = css.sph
+# css2 = css.sph_custom
+# css3 = css.style_edit
+# css4 = css.common_edit
 template = '''
 
 <html>
 <head>
-<link href="./common/sph20201212.css" rel="stylesheet" />
-<link href="./common/sph_custom20211001.css" rel="stylesheet" />
-<link href="./common/style_edit220114.css" rel="stylesheet" />
+<meta charset="utf-8" />
+<link href="file:///{0}/common/sph.css" rel="stylesheet" />
+<link href="file:///{0}/common/sph_custom.css" rel="stylesheet" />
+<link href="file:///{0}/common/style_edit.css" rel="stylesheet" />
+<link href="file:///{0}/common/common_edit.css" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css?family=Noto+Sans+JP|Overpass" rel="stylesheet">
+<script src="https://twemoji.maxcdn.com/v/14.0.2/twemoji.min.js" integrity="sha384-32KMvAMS4DUBcQtHG6fzADguo/tpN1Nh6BAJa2QqZc6/i0K+YPQE+bWiqBRAWuFs" crossorigin="anonymous"></script>
+<script src="https://cdn.hinatazaka46.com/files/14/hinata/product/js/sph_product20200828.js"></script>
 </head>
 <body class="pages pages_sph pages_sph_60021 pages_sph_60021_index">
     <div class="l-wrap p-wrap__bg">
@@ -135,9 +150,10 @@ template = '''
 </body>
 </html>
 
-'''
+'''.format(cwd)
 
-listcss = [CSS(string='''
+font_config = FontConfiguration()
+css_font_string = '''
 @page:nth(1) {
   size: Legal; /* Change from the default size of A4 */
   margin: 0mm 0mm 10mm 0mm; /* Set margin on each page */
@@ -146,23 +162,49 @@ listcss = [CSS(string='''
   size: Legal; /* Change from the default size of A4 */
   margin: 15mm 0mm 10mm 0mm; /* Set margin on each page */
 }
-'''),CSS(string=css1), CSS(string=css2), CSS(string=css3)]
+@font-face {
+        font-family: "Noto Sans JP";
+        src: url(file:///'''+cwd+'''/font/NotoSansJP-Regular.otf) format('opentype');
+    }
+@font-face {
+        font-family: "Noto Color Emoji";
+        src: url(file:///'''+cwd+'''/font/NotoColorEmoji.ttf) format('opentype');
+    }
+@font-face {
+    font-family: "Overpass";
+    src: url(file://'''+cwd+'''/font/Overpass_Regular.ttf)  format('truetype');
+}
+@font-face {
+    font-family: Overpass;
+    src: url(file:///'''+cwd+'''/font/Overpass_Regular.ttf)  format('truetype');
+}
+'''
+
+listcss = [CSS(string=css_font_string,font_config=font_config),CSS(filename=os.path.join(cwd,"common","common_edit.css")), CSS(filename=os.path.join(cwd,"common","sph_custom.css")), CSS(filename=os.path.join(cwd,"common","sph.css")),CSS(filename=os.path.join(cwd,"common","style_edit.css")), CSS(url="https://fonts.googleapis.com/css?family=Noto+Sans+JP|Overpass",font_config=font_config)]
 
 #region parse argument
 parser = argparse.ArgumentParser()
 parser.add_argument(
     "-p", "--page", help="Define from which page to download.", type=int, default=1)
 parser.add_argument(
-    "-d", "--dir", help="Define where to save the PDF.", default=str(pathlib.Path(__file__).parent.resolve()))
+    "-d", "--dir", help="Define where to save the PDF.", default=cwd)
 parser.add_argument(
     "-a", "--allPages", help="Save all of each member's blog.", action='store_true')
+parser.add_argument(
+"-s", "--selectmember", help="Select whose member's blog to be downloaded.", action='store_true')
 args = parser.parse_args()
 #endregion
+
+options = webdriver.ChromeOptions()
+options.add_argument('--ignore-certificate-errors')
+options.add_argument('--incognito')
+options.add_argument('--headless')
+driver = webdriver.Chrome(chrome_options=options)
 
 def download_pdf(member, path, title, content, article_date):
     print("Archiving {0} from {1}".format(str(title), member["memberName"]))
     html = HTML(string=str(content))
-    html.write_pdf(path, stylesheets=listcss)
+    html.write_pdf(path, stylesheets=listcss, font_config=font_config)
 
     file = filedate.File(path)
     file.set(
@@ -184,8 +226,10 @@ def process_page(member, base_path, pages):
             URL = "?".join([base_url, paramString])
 
         print(URL)
-        page = requests.get(URL)
-        soup = BeautifulSoup(page.content, "html.parser")
+        # page = requests.get(URL)
+        driver.get(URL)
+        page = driver.page_source
+        soup = BeautifulSoup(page, "html.parser")
 
         if soup.find("div", class_="l-contents--blog-list") is None:
             is_success = False
@@ -247,6 +291,7 @@ def process_page(member, base_path, pages):
                 except Exception as e:
                     print("Problem downloading {0}-{1}".format(member["memberName"],str(article_title)))
                     print(str(e))
+        driver.quit()
     except Exception as e:
         is_success = False
         print("Problem getting data of {0} \n".format(member["memberName"]))
@@ -258,13 +303,32 @@ config = json.loads(member_list)
 BASE_PATH = args.dir
 
 print("Save Path: {0}".format(BASE_PATH))
-for member in config["members"]:
-    print("Archiving {0}'s blog.".format(member["memberName"]))        
+if args.selectmember:
+    print("Member list:")
+    c = 1
+    for member in config["members"]:
+        print("{0}. {1}".format(c,member["memberName"]))
+        c+=1
+    print("Please select one member (type the index number):")
+    select = int(input())
+    select_member = config["members"][select-1]
+    print("Archiving {0}'s blog.".format(select_member["memberName"]))
     page = args.page
     if args.allPages:
-        while(process_page(member, BASE_PATH, page)):
+        while(process_page(select_member, BASE_PATH, page)):
             page += 1
     else:
-        process_page(member, BASE_PATH, page)
+        process_page(select_member, BASE_PATH, page)
 
     print("Downloaded {0}'s blog.\n".format(member["memberName"]))
+else:
+    for member in config["members"]:
+        print("Archiving {0}'s blog.".format(member["memberName"]))        
+        page = args.page
+        if args.allPages:
+            while(process_page(member, BASE_PATH, page)):
+                page += 1
+        else:
+            process_page(member, BASE_PATH, page)
+
+        print("Downloaded {0}'s blog.\n".format(member["memberName"]))
